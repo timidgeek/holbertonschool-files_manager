@@ -7,12 +7,18 @@ class DBClient {
     const host = process.env.DB_HOST || 'localhost';
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || 'files_manager';
-    const uri = `mongodb://${host}:${port}/${database}`;
 
-    // initiate MongoDB client
-    this.client = new MongoClient(uri, { userNewUrlParser: true, useUnifiedTopology: true });
-    this.db = null; // MongoDB client instance
+    const url = `mongodb://${host}:${port}`;
+    this.client = new MongoClient(url, { useUnifiedTopology: true });
+
+    this.client.connect()
+      .then(() => {
+        this.db = this.client.db(database);
+        console.log('MongoDB connected');
+      })
+      .catch(err => console.error('MongoDB connection error:', err));
   }
+
 
   // check if connection success
   async isAlive() {
@@ -25,28 +31,21 @@ class DBClient {
     }
   }
 
-  // return number of docs in collection `users`
   async nbUsers() {
-    try {
-      const usersCollection = this.db.collection('users');
-      const numDocs = await usersCollection.countDocuments();
-      return numDocs;
-    } catch (error) {
-      throw new error (`Couldn't fetch documents: ${error.message}`);
-    }
+    return this.db.collection('users').countDocuments();
   }
-  // return number of docs in collection `files`
+  catch(error) {
+    throw new error(`Couldn’t fetch documents: ${error.message}`);
+  }
+
   async nbFiles() {
-    try {
-      const filesCollection = this.db.collection('files');
-      const numDocs = await filesCollection.countDocuments();
-      return numDocs;
-    } catch (error) {
-      throw new error (`Couldn't fetch documents: ${error.message}`);
-    }
+    return this.db.collection('files').countDocuments();
+  }
+  catch(error) {
+    throw new error(`Couldn’t fetch documents: ${error.message}`);
   }
 }
 
-// export DBClient instance
+
 const dbClient = new DBClient();
 module.exports = dbClient;
