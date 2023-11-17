@@ -1,5 +1,6 @@
 // Task 2. First API
 const express = require('express');
+
 const app = express();
 
 // Load routes
@@ -11,7 +12,7 @@ app.use(routes);
 // Listen on port from .env
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log('Server running on port 5000');
+  console.log('Server running on port 5000');
 });
 
 module.exports = app;
