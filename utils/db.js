@@ -6,7 +6,6 @@ const port = process.env.DB_PORT || 27017;
 const database = process.env.DB_DATABASE || 'files_manager';
 
 const url = `mongodb://${host}:${port}/${database}`;
-const client = new MongoClient(url)
 
 class DBClient {
   // constructor to create client to MongoDB
@@ -19,22 +18,16 @@ class DBClient {
       }
       if (error) {
         this.db = false;
-        console.log(error)
+        console.log(error);
       }
     });
-
   }
 
-
-  // check if connection success
-  async isAlive() {
-    try {
-      await this.client.connect();
-      this.db = this.client.db();
-      return true;
-    } catch (error) {
-      return false;
+  isAlive() {
+    if (!this.db) {
+      return !!this.db;
     }
+    return !!this.db;
   }
 
   async nbUsers() {
@@ -43,7 +36,7 @@ class DBClient {
   }
 
   async nbFiles() {
-    const numDocs = await this.users.countDocuments({});
+    const numDocs = await this.files.countDocuments({});
     return numDocs;
   }
 }
