@@ -5,6 +5,15 @@ const fsp = require('fs').promises;
 const Mongo = require('../utils/db');
 const Redis = require('../utils/redis');
 
+// Helper function to retrieve user ID from a given token
+async function getUserIdFromToken(token) {
+  const userIdString = await Redis.get(`auth_${token}`);
+  if (!userIdString) {
+    throw new Error('Unauthorized');
+  }
+  return new mongodb.ObjectID(userIdString);
+}
+
 // Extract and validate the token and file metadata from the request
 class FilesController {
   static async postUpload(req, res) {
@@ -98,6 +107,10 @@ class FilesController {
       return res.status(200).send(file);
     } catch (error) {
       console.error(error);
+      if (error.message === 'Unauthorized') {
+        return res.status(401).send({ error: 'Unauthorized' });
+      }
+      // Handle other potential errors
       return res.status(500).send({ error: 'Server error' });
     }
   }
@@ -133,6 +146,10 @@ class FilesController {
       return res.status(200).send(files);
     } catch (error) {
       console.error(error);
+      if (error.message === 'Unauthorized') {
+        return res.status(401).send({ error: 'Unauthorized' });
+      }
+      // Handle other potential errors
       return res.status(500).send({ error: 'Server error' });
     }
   }
