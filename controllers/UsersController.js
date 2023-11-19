@@ -51,8 +51,15 @@ class UsersController {
     const userId = new mongo.ObjectId(redisToken);
     const user = await dbClient.users.findOne({ _id: userId });
 
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     // return user object email & id
-    return res.status(200).json({ id: user._id, email: user.email });
+    return res.status(200).json({ id: user._id.toSting, email: user.email });
+  } catch(error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
