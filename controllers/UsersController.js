@@ -1,5 +1,7 @@
 // UsersController
 const sha1 = require('sha1'); // for hashing
+const mongo = require('mongodb');
+const redis = require('../utils/redis');
 const dbClient = require('../utils/db');
 
 class UsersController {
@@ -34,6 +36,23 @@ class UsersController {
 
     // endpoint returns new user w one email and id
     return res.status(201).json({ id: newUser.insertedId, email });
+  }
+
+  // GET req - retrieve user from token
+  static async getMe(req, res) {
+    const token = req.header('X-Token');
+    const redisToken = await redis.get(`auth_${token}`);
+
+    if (!redisToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // get user by redis token
+    const userId = new mongo.ObjectId(redisToken);
+    const user = await dbClient.users.findOne({ _id: userId });
+
+    // return user object email & id
+    return res.status(200).json({ id: user._id, email: user.email });
   }
 }
 
