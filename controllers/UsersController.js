@@ -7,12 +7,6 @@ class UsersController {
   static async postNew(req, res) {
     const { email, password } = req.body;
 
-    // check if the email already exists
-    const userExists = await dbClient.users.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ error: 'Already exist' });
-    }
-
     // check if email is missing
     if (!req.body.email) {
       return res.status(400).json({ error: 'Missing email' });
@@ -23,10 +17,19 @@ class UsersController {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    // create new user with hashed password
+    // check if the email already exists
+    const userExists = await dbClient.users.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ error: 'Already exist' });
+    }
+
+    // hash that pass
+    const hashPass = sha1(password);
+
+    // create new user
     const newUser = await dbClient.users.insertOne({
       email,
-      password: sha1(password),
+      password: hashPass,
     });
 
     // endpoint returns new user w one email and id
