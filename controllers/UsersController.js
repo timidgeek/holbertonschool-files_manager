@@ -40,26 +40,27 @@ class UsersController {
 
   // GET req - retrieve user from token
   static async getMe(req, res) {
-    const token = req.header('X-Token');
-    const redisToken = await redis.get(`auth_${token}`);
+    try {
+      const token = req.header('X-Token');
+      const redisToken = await redis.get(`auth_${token}`);
 
-    if (!redisToken) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      if (!redisToken) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const userId = new mongo.ObjectId(redisToken);
+      const user = await dbClient.users.findOne({ _id: userId });
+
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Fixed typo here .toSting -> .toString
+      return res.status(200).json({ id: user._id.toString(), email: user.email });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    // get user by redis token
-    const userId = new mongo.ObjectId(redisToken);
-    const user = await dbClient.users.findOne({ _id: userId });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // return user object email & id
-    return res.status(200).json({ id: user._id.toSting, email: user.email });
-  } catch(error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
