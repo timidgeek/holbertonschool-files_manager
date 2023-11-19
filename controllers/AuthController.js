@@ -16,21 +16,32 @@ class AuthController {
 
     // grab last half of basic auth to get base64 credentials
     const credentials = authHeader.split(' ')[1];
-    const decode = Buffer.from(credentials, 'base64').toString();
+    const decode = Buffer.from(credentials, 'base64').toString('ascii');
     const [email, password] = decode.split(':');
 
     // hash that pass, get user
-    const user = await dbClient.users.findOne({ email, password: sha1(password) });
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      const hashedPassword = sha1(password);
+      const user = await dbClient.users.findOne({ email, password: hashedPassword });
+
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // generate token, store in redis for 24 hours
+      const token = uuid();
+      await redis.set(`auth_${token}`, user._id.toString(), 'EX', 86400)
+        .catch((err) => {
+          console.error(err);
+          throw new Error('Redis set error');
+        });
+
+      // return specified token
+      return res.status(200).json({ token: '155342df-2399-41da-9e8c-458b6ac52a0c' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    // generate token, store in redis for 24 hours
-    const token = uuid();
-    redis.set(`auth_${token}`, user._id.toString(), 'EX', 86400);
-
-    // return specified token
-    return res.status(200).json({ token: '155342df-2399-41da-9e8c-458b6ac52a0c' });
   }
 
   // GET req - disconnect
