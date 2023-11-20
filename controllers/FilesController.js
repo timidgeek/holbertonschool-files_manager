@@ -22,7 +22,7 @@ class FilesController {
     const token = req.header('X-Token');
     const authToken = `auth_${token}`;
     const userIdString = await Redis.get(authToken);
-    if (!userIdString) return res.status(401).send({ error: 'Unauthorized' });
+    if (!userIdString) return res.status(401).json({ error: 'Unauthorized' });
 
     // Parse userId from string to mongodb.ObjectID
     const userId = new mongodb.ObjectID(userIdString);
@@ -37,16 +37,21 @@ class FilesController {
     } = req.body;
 
     // Validate the file metadata
-    if (!name) return res.status(400).send({ error: 'Missing name' });
-    if (!['folder', 'file', 'image'].includes(type)) return res.status(400).send({ error: 'Missing type' });
-    if (!data && type !== 'folder') return res.status(400).send({ error: 'Missing data' });
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+    if (!['folder', 'file', 'image'].includes(type)) return res.status(400).json({ error: 'Missing type' });
+    if (!data && type !== 'folder') return res.status(400).json({ error: 'Missing data' });
 
     // Check for valid parent_id
+    let parentObjectId;
     if (parentId !== '0') {
-      const parentObjectId = new mongodb.ObjectID(parentId);
-      const parent = await Mongo.db.collection('files').findOne({ _id: new mongodb.ObjectID(parentObjectId) });
-      if (!parent) return res.status(400).send({ error: 'Parent not found' });
-      if (parent.type !== 'folder') return res.status(400).send({ error: 'Parent is not a folder' });
+      try {
+        parentObjectId = new mongodb.ObjectID(parentId);
+      } catch (e) {
+        return res.status(400).json({ error: 'Parent not found' });
+      }
+      const parent = await Mongo.db.collection('files').findOne({ _id: parentObjectId });
+      if (!parent) return res.status(400).json({ error: 'Parent not found' });
+      if (parent.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
     }
 
     // Prepare file document to be saved to db
@@ -55,16 +60,21 @@ class FilesController {
       name,
       type,
       isPublic,
-      data,
-      parentId,
+      parentId: parentId === '0' ? '0' : parentObjectId,
     };
 
     // If type is folder, save directly to db
     try {
       if (type === 'folder') {
         const result = await Mongo.db.collection('files').insertOne(newFile);
-        newFile._id = result.insertedId;
-        return res.status(201).send(newFile);
+        return res.status(201).json({
+          id: result.insertedId.toString(),
+          userId: userId.toString(),
+          name,
+          type,
+          isPublic,
+          parentId: 0,
+        });
       }
       // If type is file or image, save to disk and then to db
       const fileData = Buffer.from(data, 'base64');
@@ -72,13 +82,22 @@ class FilesController {
       await fsp.mkdir(folderPath, { recursive: true });
       const filePath = `${folderPath}/${uuidv4()}`;
       await fsp.writeFile(filePath, fileData);
+
       newFile.localPath = filePath;
       const result = await Mongo.db.collection('files').insertOne(newFile);
-      newFile._id = result.insertedId;
-      return res.status(201).send(newFile);
+
+      return res.status(201).json({
+        id: result.insertedId.toString(),
+        userId: userId.toString(),
+        name,
+        type,
+        isPublic,
+        parentId: parentId === '0' ? 0 : parseInt(parentId, 10),
+        localPath: filePath,
+      });
     } catch (error) {
       console.error(error);
-      return res.status(500).send({ error: 'Server error' });
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 
