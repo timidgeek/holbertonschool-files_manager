@@ -2,6 +2,8 @@
 const { v4: uuidv4 } = require('uuid');
 const mongodb = require('mongodb');
 const fsp = require('fs').promises;
+const fs = require('fs');
+const mime = require('mime-types');
 const Mongo = require('../utils/db');
 const Redis = require('../utils/redis');
 
@@ -139,20 +141,20 @@ class FilesController {
 
       console.log(`Files found: ${JSON.stringify(files)}`); // Debugging log
 
-      return res.status(200).send(files.map(file => ({
+      return res.status(200).send(files.map((file) => ({
         id: file._id,
         userId: file.userId,
         name: file.name,
         type: file.type,
         isPublic: file.isPublic,
-        parentId: file.parentId
+        parentId: file.parentId,
       })));
     } catch (error) {
       console.error(error);
       return res.status(500).send({ error: 'Server error' });
     }
   }
-  
+
   static async putPublish(req, res) {
     const fileId = req.params.id;
     const token = req.header('X-Token');
@@ -163,7 +165,7 @@ class FilesController {
       const file = await Mongo.db.collection('files').findOneAndUpdate(
         { _id: new mongodb.ObjectID(fileId), userId },
         { $set: { isPublic: true } },
-        { returnOriginal: false }
+        { returnOriginal: false },
       );
 
       if (!file.value) {
@@ -190,7 +192,7 @@ class FilesController {
       const file = await Mongo.db.collection('files').findOneAndUpdate(
         { _id: new mongodb.ObjectID(fileId), userId },
         { $set: { isPublic: false } },
-        { returnOriginal: false }
+        { returnOriginal: false },
       );
 
       if (!file.value) {
@@ -204,6 +206,45 @@ class FilesController {
         return res.status(401).send({ error: 'Unauthorized' });
       }
       return res.status(500).send({ error: 'Server error' });
+    }
+  }
+
+  // eslint-disable-next-line consistent-return
+  static async getFile(req, res) {
+    const fileId = req.params.id;
+    const token = req.header('X-Token');
+
+    try {
+      // Fetch the file from the database
+      const file = await Mongo.db.collection('files').findOne({ _id: new mongodb.ObjectID(fileId) });
+
+      // Check if file exists
+      if (!file) {
+        return res.status(404).send({ error: 'Not found' });
+      }
+
+      // Check if the file is public or if the user is authenticated and owns the file
+      if (!file.isPublic && (!token
+        || file.userId.toString() !== (await getUserIdFromToken(token)))) {
+        return res.status(404).send({ error: 'Not found' });
+      }
+
+      // Check if the file is a folder
+      if (file.type === 'folder') {
+        return res.status(400).send({ error: "A folder doesn't have content" });
+      }
+
+      // Check if the file exists on the server
+      if (!fs.existsSync(file.localPath)) {
+        return res.status(404).send({ error: 'Not found' });
+      }
+
+      // Serve the file with the correct MIME type
+      res.type(mime.lookup(file.name) || 'application/octet-stream');
+      fs.createReadStream(file.localPath).pipe(res);
+    } catch (error) {
+      console.error(error);
+      res.status(500).send({ error: 'Server error' });
     }
   }
 }
