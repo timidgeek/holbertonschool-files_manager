@@ -19,7 +19,7 @@ class AuthController {
     const decode = Buffer.from(credentials, 'base64').toString();
     const [email, password] = decode.split(':');
 
-    if (!email || !password) return response.status(401).send({ error: 'Unauthorized' });
+    if (!email || !password) return res.status(401).send({ error: 'Unauthorized' });
 
     // hash that pass, get user
     try {
