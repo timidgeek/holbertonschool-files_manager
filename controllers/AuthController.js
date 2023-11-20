@@ -16,7 +16,7 @@ class AuthController {
 
     // grab last half of basic auth to get base64 credentials
     const credentials = authHeader.split(' ')[1];
-    const decode = Buffer.from(credentials, 'base64').toString('ascii');
+    const decode = Buffer.from(credentials, 'base64').toString();
     const [email, password] = decode.split(':');
 
     // hash that pass, get user

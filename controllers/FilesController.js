@@ -121,35 +121,88 @@ class FilesController {
     const { parentId = '0', page = 0 } = req.query;
     const skip = parseInt(page, 10) * 20;
 
-    // Ensure the token is provided
-    if (!token) {
-      return res.status(401).send({ error: 'Unauthorized' });
-    }
-
     try {
-      // Attempt to retrieve user's id from token
       const userId = await getUserIdFromToken(token);
-      const query = { userId };
 
-      // If parentId is provided and not 0, add it to the query
+      console.log(`UserID: ${userId}, ParentID: ${parentId}`); // Debugging log
+
+      const query = { userId };
       if (parentId !== '0') {
-        query.parentId = new mongodb.ObjectID(parentId);
+        query.parentId = parentId;
       }
 
-      // Fetch the files with pagination
       const files = await Mongo.db.collection('files')
         .find(query)
         .skip(skip)
         .limit(20)
         .toArray();
 
-      return res.status(200).send(files);
+      console.log(`Files found: ${JSON.stringify(files)}`); // Debugging log
+
+      return res.status(200).send(files.map(file => ({
+        id: file._id,
+        userId: file.userId,
+        name: file.name,
+        type: file.type,
+        isPublic: file.isPublic,
+        parentId: file.parentId
+      })));
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send({ error: 'Server error' });
+    }
+  }
+  
+  static async putPublish(req, res) {
+    const fileId = req.params.id;
+    const token = req.header('X-Token');
+
+    try {
+      const userId = await getUserIdFromToken(token);
+
+      const file = await Mongo.db.collection('files').findOneAndUpdate(
+        { _id: new mongodb.ObjectID(fileId), userId },
+        { $set: { isPublic: true } },
+        { returnOriginal: false }
+      );
+
+      if (!file.value) {
+        return res.status(404).send({ error: 'Not found' });
+      }
+
+      return res.status(200).send(file.value);
     } catch (error) {
       console.error(error);
       if (error.message === 'Unauthorized') {
         return res.status(401).send({ error: 'Unauthorized' });
       }
-      // Handle other potential errors
+      return res.status(500).send({ error: 'Server error' });
+    }
+  }
+
+  static async putUnpublish(req, res) {
+    const fileId = req.params.id;
+    const token = req.header('X-Token');
+
+    try {
+      const userId = await getUserIdFromToken(token);
+
+      const file = await Mongo.db.collection('files').findOneAndUpdate(
+        { _id: new mongodb.ObjectID(fileId), userId },
+        { $set: { isPublic: false } },
+        { returnOriginal: false }
+      );
+
+      if (!file.value) {
+        return res.status(404).send({ error: 'Not found' });
+      }
+
+      return res.status(200).send(file.value);
+    } catch (error) {
+      console.error(error);
+      if (error.message === 'Unauthorized') {
+        return res.status(401).send({ error: 'Unauthorized' });
+      }
       return res.status(500).send({ error: 'Server error' });
     }
   }
