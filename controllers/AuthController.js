@@ -30,14 +30,14 @@ class AuthController {
 
       // generate token, store in redis for 24 hours
       const token = uuid();
-      await redis.set(`auth_${token}`, user._id.toString(), 'EX', 86400)
+      await redis.set(`auth_${token}`, user._id.toString(), 86400)
         .catch((err) => {
           console.error(err);
           throw new Error('Redis set error');
         });
 
       // return specified token
-      return res.status(200).json({ token: '155342df-2399-41da-9e8c-458b6ac52a0c' });
+      return res.status(200).json({ token });
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Internal Server Error' });

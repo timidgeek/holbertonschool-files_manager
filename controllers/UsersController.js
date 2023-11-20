@@ -40,22 +40,25 @@ class UsersController {
 
   // GET req - retrieve user from token
   static async getMe(req, res) {
-    try {
-      const token = req.header('X-Token');
-      const redisToken = await redis.get(`auth_${token}`);
+    const token = req.header('X-Token');
+    console.log(`Token received: ${token}`);
 
-      if (!redisToken) {
+    try {
+      const userIdString = await redis.get(`auth_${token}`);
+      console.log(`User ID retrieved from Redis: ${userIdString}`);
+
+      if (!userIdString) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const userId = new mongo.ObjectId(redisToken);
+      const userId = new mongo.ObjectID(userIdString);
       const user = await dbClient.users.findOne({ _id: userId });
+      console.log(`User retrieved from DB: ${user}`);
 
       if (!user) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      // Fixed typo here .toSting -> .toString
       return res.status(200).json({ id: user._id.toString(), email: user.email });
     } catch (error) {
       console.error(error);
