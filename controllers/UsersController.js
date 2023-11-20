@@ -10,12 +10,12 @@ class UsersController {
     const { email, password } = req.body;
 
     // check if email is missing
-    if (!req.body.email) {
+    if (!email) {
       return res.status(400).json({ error: 'Missing email' });
     }
 
     // check if password is missing
-    if (!req.body.password) {
+    if (!password) {
       return res.status(400).json({ error: 'Missing password' });
     }
 
