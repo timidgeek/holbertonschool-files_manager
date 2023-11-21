@@ -49,7 +49,7 @@ class FilesController {
       } catch (e) {
         return res.status(400).json({ error: 'Parent not found' });
       }
-      const parent = await Mongo.db.collection('files').findOne({ _id: parentObjectId });
+      const parent = await Mongo.db.collection('files').findOne({ _id: parentObjectId, userId });
       if (!parent) return res.status(400).json({ error: 'Parent not found' });
       if (parent.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
     }
@@ -60,11 +60,11 @@ class FilesController {
       name,
       type,
       isPublic,
-      parentId: parentId === '0' ? '0' : parentObjectId,
+      parentId: parentId === '0' ? '0' : new mongodb.ObjectID(parentId),
     };
 
-    // If type is folder, save directly to db
     try {
+      // If type is folder, save directly to db
       if (type === 'folder') {
         const result = await Mongo.db.collection('files').insertOne(newFile);
         return res.status(201).json({
@@ -73,28 +73,28 @@ class FilesController {
           name,
           type,
           isPublic,
-          parentId: 0,
+          parentId: parentId === '0' ? '0' : parentId,
         });
       }
-      // If type is file or image, save to disk and then to db
-      const fileData = Buffer.from(data, 'base64');
-      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
-      await fsp.mkdir(folderPath, { recursive: true });
-      const filePath = `${folderPath}/${uuidv4()}`;
-      await fsp.writeFile(filePath, fileData);
+        // If type is file or image, save to disk and then to db
+        const fileData = Buffer.from(data, 'base64');
+        const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+        await fsp.mkdir(folderPath, { recursive: true });
+        const filePath = `${folderPath}/${uuidv4()}`;
+        await fsp.writeFile(filePath, fileData);
 
-      newFile.localPath = filePath;
-      const result = await Mongo.db.collection('files').insertOne(newFile);
+        newFile.localPath = filePath;
+        const result = await Mongo.db.collection('files').insertOne(newFile);
 
-      return res.status(201).json({
-        id: result.insertedId.toString(),
-        userId: userId.toString(),
-        name,
-        type,
-        isPublic,
-        parentId: parentId === '0' ? 0 : parseInt(parentId, 10),
-        localPath: filePath,
-      });
+        return res.status(201).json({
+          id: result.insertedId.toString(),
+          userId: userId.toString(),
+          name,
+          type,
+          isPublic,
+          parentId: parentId === '0' ? '0' : parentId,
+          localPath: filePath,
+        });
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
@@ -145,11 +145,11 @@ class FilesController {
     try {
       const userId = await getUserIdFromToken(token);
 
-      console.log(`UserID: ${userId}, ParentID: ${parentId}`); // Debugging log
-
       const query = { userId };
       if (parentId !== '0') {
-        query.parentId = parentId;
+        query.parentId = new mongodb.ObjectID(parentId);
+      } else {
+        query.parentId = '0';
       }
 
       const files = await Mongo.db.collection('files')
@@ -158,19 +158,20 @@ class FilesController {
         .limit(20)
         .toArray();
 
-      console.log(`Files found: ${JSON.stringify(files)}`); // Debugging log
-
-      return res.status(200).send(files.map((file) => ({
-        id: file._id,
-        userId: file.userId,
+      // Map the files to the required format
+      const responseFiles = files.map(file => ({
+        id: file._id.toString(),
+        userId: file.userId.toString(),
         name: file.name,
         type: file.type,
         isPublic: file.isPublic,
-        parentId: file.parentId,
-      })));
+        parentId: file.parentId.toString() === '0' ? 0 : file.parentId.toString(),
+      }));
+
+      return res.status(200).json(responseFiles);
     } catch (error) {
       console.error(error);
-      return res.status(500).send({ error: 'Server error' });
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 
