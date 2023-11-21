@@ -77,8 +77,9 @@ class FilesController {
     };
 
     try {
-      if (type === 'folder') {
-        // Save folder directly to DB
+      if (type === 'folder' || type === 'file' || type === 'image') {
+        // Save folder, file or image to DB
+        if (type === 'folder') {
         const result = await Mongo.db.collection('files').insertOne(newFile);
         return res.status(201).json({
           id: result.insertedId.toString(),
@@ -88,7 +89,7 @@ class FilesController {
           isPublic,
           parentId,
         });
-      }
+      } else if (type === 'file' || type === 'image') {
       // Save file or image to disk and DB
       const fileData = Buffer.from(data, 'base64');
       const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -103,10 +104,12 @@ class FilesController {
         name,
         type,
         isPublic,
-        parentId: parentId.toString(),
+        parentId: parentId === 0 ? '0' : parentId.toString(),
         localPath: filePath,
       });
-    } catch (error) {
+    }
+  }
+} catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
     }
@@ -148,45 +151,64 @@ class FilesController {
   }
 
   // List all files for a user, with optional parentId and pagination
+  // Task 6
   static async getIndex(req, res) {
     const token = req.header('X-Token');
-    const { parentId = '0', page = '0' } = req.query;
-    const skip = parseInt(page, 10) * 20;
 
-    if (!token) {
+    // Check for token and retrieve user ID or return 401 Unauthorized
+    let userId;
+    try {
+      userId = await getUserIdFromToken(token);
+    } catch (error) {
+      console.error(error);
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    // Extract parentId and page from query string
+    const { parentId = '0', page = '0' } = req.query;
+    const skip = parseInt(page, 10) * 20;
+
     try {
-      const userId = await getUserIdFromToken(token);
+      // Construct query with parentId
+      const matchQuery = { userId };
+      if (parentId !== '0') {
+        matchQuery.parentId = new mongodb.ObjectID(parentId);
+      } else {
+        matchQuery.parentId = '0';
+      }
 
-      const query = { userId };
-      // If parentId is not '0', convert it to an ObjectId, otherwise use '0'
-      query.parentId = parentId !== '0' ? new mongodb.ObjectID(parentId) : '0';
+    // Use aggregation for pagination
+    const files = await Mongo.db.collection('files').aggregate([
+      { $match: matchQuery },
+      { $skip: skip },
+      { $limit: 20 },
+      { $project: {
+        id: '$_id',
+        userId: '$userId',
+        name: '$name',
+        type: '$type',
+        isPublic: '$isPublic',
+        parentId: '$parentId'
+      }
+      }
+    ]).toArray();
 
-      const files = await Mongo.db.collection('files')
-        .find(query)
-        .skip(skip)
-        .limit(20)
-        .toArray();
+    // Convert MongoDB ObjectIDs to strings
+    const responseFiles = files.map((file) => ({
+      ...file,
+      id: file._id.toString(),
+      userId: file.userId.toString(),
+      parentId: file.parentId.toString() === '0' ? 0 : file.parentId.toString(),
+    }));
 
-      // Map the files to the required format
-      const responseFiles = files.map((file) => ({
-        id: file._id.toString(),
-        userId: file.userId.toString(),
-        name: file.name,
-        type: file.type,
-        isPublic: file.isPublic,
-        parentId: file.parentId.toString() === '0' ? 0 : file.parentId.toString(),
-      }));
-
-      return res.status(200).json(responseFiles);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Server error' });
-    }
+    return res.status(200).send(responseFiles);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send({ error: 'Server error' });
   }
+}
 
+// Publish a file by its id // Task 7
   static async putPublish(req, res) {
     const fileId = req.params.id;
     const token = req.header('X-Token');
@@ -214,6 +236,7 @@ class FilesController {
     }
   }
 
+  // Unpublish a file by its id // Task 7
   static async putUnpublish(req, res) {
     const fileId = req.params.id;
     const token = req.header('X-Token');
