@@ -76,25 +76,25 @@ class FilesController {
           parentId: parentId === '0' ? '0' : parentId,
         });
       }
-        // If type is file or image, save to disk and then to db
-        const fileData = Buffer.from(data, 'base64');
-        const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
-        await fsp.mkdir(folderPath, { recursive: true });
-        const filePath = `${folderPath}/${uuidv4()}`;
-        await fsp.writeFile(filePath, fileData);
+      // If type is file or image, save to disk and then to db
+      const fileData = Buffer.from(data, 'base64');
+      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+      await fsp.mkdir(folderPath, { recursive: true });
+      const filePath = `${folderPath}/${uuidv4()}`;
+      await fsp.writeFile(filePath, fileData);
 
-        newFile.localPath = filePath;
-        const result = await Mongo.db.collection('files').insertOne(newFile);
+      newFile.localPath = filePath;
+      const result = await Mongo.db.collection('files').insertOne(newFile);
 
-        return res.status(201).json({
-          id: result.insertedId.toString(),
-          userId: userId.toString(),
-          name,
-          type,
-          isPublic,
-          parentId: parentId === '0' ? '0' : parentId,
-          localPath: filePath,
-        });
+      return res.status(201).json({
+        id: result.insertedId.toString(),
+        userId: userId.toString(),
+        name,
+        type,
+        isPublic,
+        parentId: parentId === '0' ? '0' : parentId,
+        localPath: filePath,
+      });
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
@@ -159,7 +159,7 @@ class FilesController {
         .toArray();
 
       // Map the files to the required format
-      const responseFiles = files.map(file => ({
+      const responseFiles = files.map((file) => ({
         id: file._id.toString(),
         userId: file.userId.toString(),
         name: file.name,
