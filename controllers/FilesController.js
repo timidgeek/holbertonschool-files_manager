@@ -6,6 +6,7 @@ const fs = require('fs');
 const mime = require('mime-types');
 const Mongo = require('../utils/db');
 const Redis = require('../utils/redis');
+const { fileQueue } = require('../worker');
 
 // Helper function to retrieve user ID from a given token
 async function getUserIdFromToken(token) {
@@ -67,6 +68,15 @@ class FilesController {
       isPublic,
       parentId,
     };
+
+    // Add a job to bull queue for image generator
+    if (type === 'image') {
+      const userIdString = await Redis.get(`auth_${token}`);
+      await fileQueue.add({
+        userId: userIdString,
+        fileId: newFile.insertedId.toString(),
+      });
+    }
 
     try {
       // If the file is a folder, insert it directly into the database
@@ -269,6 +279,14 @@ class FilesController {
         query.$or = [{ isPublic: true }, { userId: new mongodb.ObjectID(userId) }];
       } else {
         query.isPublic = true;
+      }
+
+      // Accept size param for bull queue
+      const { size } = req.query;
+
+      // Check if local file exists with size param
+      if (!['500', '250', '100'].includes(size)) {
+        return res.status(404).json({ error: 'Not found' });
       }
 
       // Fetch the file from the database using the constructed query
