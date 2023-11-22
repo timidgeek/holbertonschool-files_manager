@@ -14,22 +14,27 @@ async function getUserIdFromToken(token) {
   if (!userIdString) {
     throw new Error('Unauthorized');
   }
-  return new mongodb.ObjectID(userIdString);
+  return new mongodb.ObjectId(userIdString);
 }
 
 // Extract and validate the token and file metadata from the request
 class FilesController {
   static async postUpload(req, res) {
     const token = req.header('X-Token');
-    // Retrieve the user ID from the token or return 401 Unauthorized
-    let userId;
-    try {
-      userId = await getUserIdFromToken(token);
-    } catch (error) {
+    if (!token) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Extract file metadata from the request body
+    // Retrieve user ID from token
+    const userIdString = await Redis.get(`auth_${token}`);
+    if (!userIdString) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const ObjectId = mongodb.ObjectId;
+    const userId = new ObjectId(userIdString);
+
+    // Extract file metadata from request body
     const {
       name, type, data, isPublic = false,
     } = req.body;
@@ -46,9 +51,14 @@ class FilesController {
       return res.status(400).json({ error: 'Missing data' });
     }
 
-    // Check if the parentId is valid or set to root
+    // Handle parentId
     if (parentId !== '0') {
-      parentId = new mongodb.ObjectID(parentId);
+      try {
+        parentId = new mongodb.ObjectId(parentId);
+      } catch (e) {
+        return res.status(400).json({ error: 'Parent not found' });
+      }
+
       const parent = await Mongo.db.collection('files').findOne({ _id: parentId, userId });
       if (!parent) {
         return res.status(400).json({ error: 'Parent not found' });
@@ -57,7 +67,7 @@ class FilesController {
         return res.status(400).json({ error: 'Parent is not a folder' });
       }
     } else {
-      parentId = new mongodb.ObjectID(); // Create a new ObjectId to represent root
+      parentId = 0; // Set parentId to integer 0 if it's the root
     }
 
     // Prepare the file document for the database
@@ -79,35 +89,38 @@ class FilesController {
     }
 
     try {
-      // If the file is a folder, insert it directly into the database
-      if (type === 'folder') {
-        const result = await Mongo.db.collection('files').insertOne(newFile);
-        return res.status(201).json({
-          id: result.insertedId.toString(),
-          userId: userId.toString(),
-          name,
-          type,
-          isPublic,
-          parentId: parentId.toString(),
-        });
+      if (type === 'folder' || type === 'file' || type === 'image') {
+        // Save folder, file or image to DB
+        if (type === 'folder') {
+          const result = await Mongo.db.collection('files').insertOne(newFile);
+          return res.status(201).json({
+            id: result.insertedId.toString(),
+            userId: userId.toString(),
+            name,
+            type,
+            isPublic,
+            parentId: parentId.toString(),
+          });
+        } else if (type === 'file' || type === 'image') {
+          // Save file or image to disk and DB
+          const fileData = Buffer.from(data, 'base64');
+          const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+          await fsp.mkdir(folderPath, { recursive: true });
+          const filePath = `${folderPath}/${uuidv4()}`;
+          await fsp.writeFile(filePath, fileData);
+          newFile.localPath = filePath;
+          const result = await Mongo.db.collection('files').insertOne(newFile);
+          return res.status(201).json({
+            id: result.insertedId.toString(),
+            userId: userId.toString(),
+            name,
+            type,
+            isPublic,
+            parentId: parentId.toString(),
+            localPath: filePath,
+          });
+        }
       }
-      // For 'file' and 'image', handle storage and database insertion
-      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
-      const filePath = `${folderPath}/${uuidv4()}`;
-      const fileData = Buffer.from(data, 'base64');
-      await fsp.mkdir(folderPath, { recursive: true });
-      await fsp.writeFile(filePath, fileData);
-      newFile.localPath = filePath;
-      const result = await Mongo.db.collection('files').insertOne(newFile);
-      return res.status(201).json({
-        id: result.insertedId.toString(),
-        userId: userId.toString(),
-        name,
-        type,
-        isPublic,
-        parentId: parentId.toString(),
-        localPath: filePath,
-      });
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
