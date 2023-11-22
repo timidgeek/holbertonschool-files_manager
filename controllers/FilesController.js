@@ -14,7 +14,7 @@ async function getUserIdFromToken(token) {
   if (!userIdString) {
     throw new Error('Unauthorized');
   }
-  return new mongodb.ObjectId(userIdString);
+  return new mongodb.ObjectID(userIdString);
 }
 
 // Extract and validate the token and file metadata from the request
@@ -30,9 +30,7 @@ class FilesController {
     if (!userIdString) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-
-    const { ObjectId } = mongodb;
-    const userId = new ObjectId(userIdString);
+    const userId = new mongodb.ObjectID(userIdString);
 
     // Extract file metadata from request body
     const {
@@ -40,21 +38,21 @@ class FilesController {
     } = req.body;
     let { parentId = '0' } = req.body;
 
-    // Validate the required file metadata
+    // Validate file metadata
     if (!name) {
       return res.status(400).json({ error: 'Missing name' });
     }
     if (!['folder', 'file', 'image'].includes(type)) {
       return res.status(400).json({ error: 'Missing type' });
     }
-    if (type !== 'folder' && !data) {
+    if (!data && type !== 'folder') {
       return res.status(400).json({ error: 'Missing data' });
     }
 
     // Handle parentId
     if (parentId !== '0') {
       try {
-        parentId = new mongodb.ObjectId(parentId);
+        parentId = new mongodb.ObjectID(parentId);
       } catch (e) {
         return res.status(400).json({ error: 'Parent not found' });
       }
@@ -70,7 +68,7 @@ class FilesController {
       parentId = 0; // Set parentId to integer 0 if it's the root
     }
 
-    // Prepare the file document for the database
+    // Prepare new file document
     const newFile = {
       userId,
       name,
@@ -89,8 +87,9 @@ class FilesController {
     }
 
     try {
-      if (type === 'folder') {
+      if (type === 'folder' || type === 'file' || type === 'image') {
         // Save folder, file or image to DB
+        if (type === 'folder') {
           const result = await Mongo.db.collection('files').insertOne(newFile);
           return res.status(201).json({
             id: result.insertedId.toString(),
@@ -98,9 +97,9 @@ class FilesController {
             name,
             type,
             isPublic,
-            parentId: parentId.toString(),
+            parentId,
           });
-        } else if (type === 'file') {
+        } if (type === 'file' || type === 'image') {
           // Save file or image to disk and DB
           const fileData = Buffer.from(data, 'base64');
           const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -115,16 +114,16 @@ class FilesController {
             name,
             type,
             isPublic,
-            parentId: parentId.toString(),
+            parentId: parentId === 0 ? '0' : parentId.toString(),
             localPath: filePath,
           });
-        } else {
-          return res.status(400).json({ error: 'Invalid type' });
         }
+      }
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
     }
+    return res.status(400).json({ error: 'Wrong type' });
   }
 
   // Get a file by its id // Task 6
