@@ -89,9 +89,8 @@ class FilesController {
     }
 
     try {
-      if (type === 'folder' || type === 'file' || type === 'image') {
+      if (type === 'folder') {
         // Save folder, file or image to DB
-        if (type === 'folder') {
           const result = await Mongo.db.collection('files').insertOne(newFile);
           return res.status(201).json({
             id: result.insertedId.toString(),
@@ -101,7 +100,7 @@ class FilesController {
             isPublic,
             parentId: parentId.toString(),
           });
-        } if (type === 'file' || type === 'image') {
+        } else if (type === 'file') {
           // Save file or image to disk and DB
           const fileData = Buffer.from(data, 'base64');
           const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -119,13 +118,13 @@ class FilesController {
             parentId: parentId.toString(),
             localPath: filePath,
           });
+        } else {
+          return res.status(400).json({ error: 'Invalid type' });
         }
-      }
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
     }
-    return res.status(400).json({ error: 'Wrong type' });
   }
 
   // Get a file by its id // Task 6
