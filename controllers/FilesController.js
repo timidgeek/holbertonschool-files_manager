@@ -31,7 +31,7 @@ class FilesController {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const ObjectId = mongodb.ObjectId;
+    const { ObjectId } = mongodb;
     const userId = new ObjectId(userIdString);
 
     // Extract file metadata from request body
@@ -101,7 +101,7 @@ class FilesController {
             isPublic,
             parentId: parentId.toString(),
           });
-        } else if (type === 'file' || type === 'image') {
+        } if (type === 'file' || type === 'image') {
           // Save file or image to disk and DB
           const fileData = Buffer.from(data, 'base64');
           const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -125,6 +125,7 @@ class FilesController {
       console.error(error);
       return res.status(500).json({ error: 'Server error' });
     }
+    return res.status(400).json({ error: 'Wrong type' });
   }
 
   // Get a file by its id // Task 6
